@@ -1,12 +1,13 @@
 {"Modules":[
 	{"Name":"Shared",
 	 "InstallLocation":"C:\\ProgramData\\Airwatch\\Shared",
-	 "Version":"2750",
+	 "Version":"2800",
 	 "Manifest":[
 		{"CopyFiles":
 			{"Destination":"$InstallLocation",
 			"From":".\\Shared\\*"
-		}},
+			}
+		},
 		{"CreateAccessFile":{
 			"Location":"$InstallLocation",
 			"SecurityLevel":0,
@@ -18,9 +19,11 @@
 				 "Rule": "NOTIN"}
 				]
 			 }]
-		}},
+		   }
+		},
 		{"DeleteFiles":[
-			".\\Shared\\api.config"
+			".\\Shared\\api.config",
+			".\\SharedDeviceModulev28.zip"
 		]},
 		{"CreateRegKeys":[
 			{ "Keys":[
@@ -37,40 +40,20 @@
 		}}
 	  ]
     },
-	{"Name":"CustomSettings",
-	 "InstallLocation":"C:\\ProgramData\\Airwatch\\Reg",
-	 "Version":"1.0.2",
+	{"Name":"AWLogon",
+	 "InstallLocation":"C:\\ProgramData\\Airwatch\\UserManagement",
+	 "Version":"1.2",
 	 "Manifest":[
 		{"CopyFiles":
 			{"Destination":"$InstallLocation",
-			"From":".\\Reg\\*"}
+			"From":".\\UserManagement\\*"}
 		},
-		{"CreatePaths":{
-			"Path":"$InstallLocation",
-			"Folders":["Queue","Installed","Profiles"]
-		}},
-		{"CreateRegKeys":[
-			{ "Keys":[
-				{"LogPath":"C:\\ProgramData\\Airwatch\\Logs"}
-			  ]
-			}
-		]},
 		{"CreateTask":{
-			"Name":"Install_CustomSettings",
-			"PSFile":"$InstallLocation\\Import_CustomSettings.ps1",
-			"TaskInterval":"PT4H"
-		}},
-		{"CreateTask":{
-			"Name":"Install_SmarterGroups",
-			"PSFile":"$InstallLocation\\Import_SmarterGroups.ps1",
-			"TaskInterval":"PT1H"
-		}},
-		{"CreateTask":{
-			"Name":"Install_Profiles",
-			"PSFile":"$InstallLocation\\Install_Profiles.ps1",
-			"TaskInterval":"PT4H"
+			"Name":"MultiUser_Logon",
+			"PSFile":"$InstallLocation\\AWLogon.ps1",
+			"TriggerType":"onUnlock"
 		}}
 	  ]
-    }
+	}
   ]
 }	

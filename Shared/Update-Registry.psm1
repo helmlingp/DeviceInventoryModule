@@ -1,20 +1,25 @@
 <#
     File: Update-Registry.ps1
     Author: cbradley@vmware.com
+	Modified by Phil Helmling: 27 Nov 2019, optimised and restructured to reduce API calls
 #>
 
-#Current file information
-$source = "Update-Registry"
-$current_version = "2.0.1"
-
-#Get current path
+#==========================Header=============================#
 $current_path = $PSScriptRoot;
 if($PSScriptRoot -eq ""){
-    $current_path = "C:\Temp\Shared\";
+    $current_path = "C:\Temp\Reg";
 }
 
+Unblock-File "$Global:shared_path\Helpers.psm1"
+$LocalHelpers = Import-Module "$Global:shared_path\Helpers.psm1" -ErrorAction Stop -PassThru -Force;
+
+$shared_path = $Global:shared_path;
+#$log_path = Get-ItemPropertyValueSafe -Path $InstallPath -Name "LogPath" -DefaultVal "C:\Temp\Logs";
+$logLocation = "$Global:log_path\RegistryModule.log"; 
+$securityLogLocation = "$Global:log_path\SecurityAudit.log";
+
 $GlobalModules = @();
-$GlobalImporter = @("$current_path\Utility-Functions.psm1", "$current_path\Database-Management.psm1")
+$GlobalImporter = @("$shared_path\Utility-Functions.psm1")
 foreach ($Import in $GlobalImporter){
     Unblock-File $Import;
     $GlobalModules += Import-Module $Import -ErrorAction Stop -PassThru -Force;
@@ -23,11 +28,8 @@ foreach ($Import in $GlobalImporter){
 If(!(Test-Path "$current_path\Audit")){
     New-Item -Path "$current_path" -Name "Audit" -ItemType Directory -Force;
 }
-$AuditDatabasePath = "$current_path\Audit\Registry.db";
 
-$InstallPath = "HKLM:\Software\AIRWATCH\ProductProvisioning";
-$logPath = Get-ItemPropertyValueSafe -Path $InstallPath -Name "LogPath" -DefaultVal "C:\Temp\Logs"
-$logLocation = "$LogPath\RegistryModule.log";        
+$AuditDatabasePath = "$Global:current_path\Audit\Registry.db";
 
 If(!(Test-Path "HKU:")){
     New-PSDrive HKU Registry HKEY_USERS  
@@ -60,7 +62,6 @@ function ConvertTo-CustomVariableSafeString{
     }
 }
 
-
 function Remove-ProfileFromDB{
     param([string]$Profile)
     $Audit = Open-AuditDatabase($AuditDatabasePath);
@@ -70,7 +71,6 @@ function Remove-ProfileFromDB{
 
     $Audit.Close();
 }
-
 
 function Set-RegistryKeyValues{
     param([string]$Profile,[string]$Path, $KeyValues,[bool]$IsDebug,[switch]$CustomVariableFormatted,[switch]$DisableAudit)
@@ -126,7 +126,6 @@ function Set-RegistryKeyValues{
 
             If($RegType -eq "String" -and $CustomVariableFormatted.IsPresent){
                 $RegValue = ConvertTo-CustomVariableSafeString $RegValue;
-                
             }
             $KeyValueObj.Value = $RegValue;
 
@@ -165,7 +164,6 @@ function Set-RegistryKeyValues{
             $Results = $RegValueResults;
         }
         return $Results;
-
 }   
 
 function Test-RegValueType{
@@ -251,9 +249,7 @@ function Get-RegKeyFormat{
     return $RegKeyResults;
 }
 
-
-function New-RegistryKey
-{
+function New-RegistryKey {
     param([string]$Path, [bool]$IsDebug=$false)
     
     $Path = (Get-RegKeyFormat -Path $Path).FullPath;
@@ -295,4 +291,4 @@ filter Test-IsInt {
 }
 
 
-Export-ModuleMember -Function Set-RegistryKeyValues, Get-RegKeyFormat
+Export-ModuleMember -Function ConvertTo-CustomVariableSafeString, Remove-ProfileFromDB, Set-RegistryKeyValues, Test-RegValueType, Get-RegKeyFormat, New-RegistryKey

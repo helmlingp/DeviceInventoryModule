@@ -1,10 +1,34 @@
+<#
+    File: Utility-Functions.psm1
+    Author: cbradley@vmware.com
+	Modified by Phil Helmling: 27 Nov 2019, optimised and restructured to reduce API calls
+#>
 
-#############################################
-# File: Utility-Functions.ps1
-# Author: Chase Bradley
-# Modified by: Phil Helmling 08 Aug 2019, changed $usernameLookup in Get-CurrentLoggedonUser to only get Active and Console Session User
-# Reassigns a Shared Device to logged in user and Moves OG if needed
-#############################################
+#==========================Header=============================#
+$current_path = $PSScriptRoot;
+if($PSScriptRoot -eq ""){
+    $current_path = "C:\Temp\Reg";
+}
+
+Unblock-File "$Global:shared_path\Helpers.psm1"
+$LocalHelpers = Import-Module "$Global:shared_path\Helpers.psm1" -ErrorAction Stop -PassThru -Force;
+
+$shared_path = $Global:shared_path;
+#$log_path = Get-ItemPropertyValueSafe -Path $InstallPath -Name "LogPath" -DefaultVal "C:\Temp\Logs";
+$logLocation = "$Global:log_path\Utility-Functions.log"; 
+$securityLogLocation = "$Global:log_path\SecurityAudit.log";
+
+$GlobalModules = @();
+#$GlobalImporter = @("$shared_path\Database-Management.psm1", "$shared_path\AirWatchAPI.psm1", "$shared_path\Utility-Functions.psm1");
+$GlobalImporter = @("$shared_path\Database-Management.psm1");
+foreach ($Import in $GlobalImporter){
+    Unblock-File $Import;
+    $GlobalModules += Import-Module $Import -ErrorAction Stop -PassThru -Force
+}
+
+if(Test-Path "$shared_path\api-debug.config"){
+    $Debug = $true;
+}
 
 function Get-ItemPropertyValueSafe{
     Param([string]$Path, [string]$Name,$DefaultVal)
@@ -22,28 +46,78 @@ function Test-ItemProperty{
     return (Get-Item -Path $Path).GetValue($Name) -ne $null;
 }
 
-$current_path = $PSScriptRoot;
-if($PSScriptRoot -eq ""){
-    $current_path = Get-ItemPropertyValueSafe -Path "HKLM:\SOFTWARE\AirWatch\ProductProvisioning" -Name "SharedlPath"  -DefaultVal "C:\Temp\Shared\";
+function Write-Log {
+    [CmdletBinding()]
+    Param
+    (
+        [Parameter(Mandatory=$true,
+                   ValueFromPipelineByPropertyName=$true)]
+        [ValidateNotNullOrEmpty()]
+        [Alias("LogContent")]
+        [string]$Message,
+
+        [Parameter(Mandatory=$false)]
+        [Alias('LogPath')]
+        [string]$Path='C:\temp\grppolicies\setup_logs.txt',
+        
+        [Parameter(Mandatory=$false)]
+        [ValidateSet("Error","Warn","Info")]
+        [string]$Level="Info",
+        
+        [Parameter(Mandatory=$false)]
+        [switch]$NoClobber
+    )
+
+    Begin
+    {
+        # Set VerbosePreference to Continue so that verbose messages are displayed.
+        $VerbosePreference = 'Continue'
+    }
+    Process
+    {
+        
+        # If the file already exists and NoClobber was specified, do not write to the log.
+        if ((Test-Path $Path) -AND $NoClobber) {
+            Write-Error "Log file $Path already exists, and you specified NoClobber. Either delete the file or specify a different name."
+            Return
+            }
+
+        # If attempting to write to a log file in a folder/path that doesn't exist create the file including the path.
+        elseif (!(Test-Path $Path)) {
+            Write-Verbose "Creating $Path."
+            $NewLogFile = New-Item $Path -Force -ItemType File
+            }
+
+        else {
+            # Nothing to see here yet.
+            }
+
+        # Format Date for our Log File
+        $FormattedDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+
+        # Write message to error, warning, or verbose pipeline and specify $LevelText
+        switch ($Level) {
+            'Error' {
+                Write-Error $Message
+                $LevelText = 'ERROR:'
+                }
+            'Warn' {
+                Write-Warning $Message
+                $LevelText = 'WARNING:'
+                }
+            'Info' {
+                Write-Verbose $Message
+                $LevelText = 'INFO:'
+                }
+            }
+        
+        # Write log entry to $Path
+        "$FormattedDate $LevelText $Message" | Out-File -FilePath $Path -Append
+    }
+    End
+    {
+    }
 }
-
-Try{
-    Unblock-File "$current_path\Logging.psm1"
-    $loggingModule = Import-Module ("$current_path\Logging.psm1") 
-    $log = $true;
-} Catch{
-    $log = $false;
-}
-
-#Set common folder locations 
-$InstallPath = "HKLM:\Software\AIRWATCH\ProductProvisioning";
-$shared_path = "C:\Temp\Shared" # default path if property not set
-$shared_path = $current_path;
-
-#setup log file
-$logPath = Get-ItemPropertyValueSafe -Path $InstallPath -Name "LogPath" -DefaultVal "C:\Temp\Logs";
-$logLocation = "$logPath\UtilitiesLogs.log";
-$securityLogLocation = "$logPath\SecurityAudit.log";
 
 function Write-Log2{ #Wrapper function to made code easier to read;
     [CmdletBinding()]
@@ -77,7 +151,7 @@ function ConvertTo-EncryptedFile{
         $encrypted = ConvertFrom-SecureString -SecureString $secured
     } Catch {
         $ErrorMessage = $_.Exception.Message;
-        Write-Log2 -Path $logLocation -Message "An error has occurrred.  Error: $ErrorMessage"
+        Write-Log2 -Path $logLocation -Message "An error has occurrred in ConvertTo-EncryptedFile.  Error: $ErrorMessage"
         return "Error";
     }
     return $encrypted;
@@ -91,7 +165,7 @@ function ConvertFrom-EncryptedFile{
         $api_settings = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
     } Catch {
         $ErrorMessage = $_.Exception.Message;
-        Write-Log2 -Path $logLocation -Message "An error has occurrred.  Error: $ErrorMessage"
+        Write-Log2 -Path $logLocation -Message "An error has occurrred in ConvertFrom-EncryptedFile.  Error: $ErrorMessage"
         return "Error: $ErrorMessage";
     }
     return $api_settings
@@ -166,11 +240,11 @@ Example: Get-CurrentLoggedonUser
 #>
 function Get-CurrentLoggedonUser{
     param([bool]$ReturnObj=$false)
-    If(Test-Path "$current_path\GetWin32User.cs"){
-        Unblock-File "$current_path\GetWin32User.cs"
+    If(Test-Path "$shared_path\GetWin32User.cs"){
+        Unblock-File "$shared_path\GetWin32User.cs"
         if (-not ([Management.Automation.PSTypeName]'AWDeviceInventory.QueryUser').Type) {
                     [string[]]$ReferencedAssemblies = 'System.Drawing', 'System.Windows.Forms', 'System.DirectoryServices'
-                    Add-Type -Path "$current_path\GetWin32User.cs" -ReferencedAssemblies $ReferencedAssemblies -IgnoreWarnings -ErrorAction 'Stop'
+                    Add-Type -Path "$shared_path\GetWin32User.cs" -ReferencedAssemblies $ReferencedAssemblies -IgnoreWarnings -ErrorAction 'Stop'
         }
     } Else{
         $usernameLookup = Get-WMIObject -class Win32_ComputerSystem | select username;
@@ -231,7 +305,6 @@ function Get-UserSIDLookup{
         }
     
 }
-
 
 function Get-ReverseSID{
     Param([string]$SID,[bool]$ignoreGroups=$true)
@@ -400,8 +473,7 @@ Input Params:
          Name of the scheduled task
             
 Output: String
-Example: Get-CurrentLoggedonUser
-        returns Chase Bradley
+
 #>
 
 Function Get-TaskPhysicalInfo{
@@ -481,17 +553,15 @@ function ConvertTo-DateTime{
             return $DateTimeConverter;
         } Catch {
             $ErrorMessage = $_.Exception.Message;
-            Write-Log2 -Path $logPath -Message "An error has occured: $ErrorMessage";
+            Write-Log2 -Path $logLocation -Message "An error has occured: $ErrorMessage";
         }
     }
     return;
 }
 
-#Initialize Zip processes
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-function Invoke-UnzipFile
-{
+function Invoke-UnzipFile {
     param([string]$zipfile, [string]$outpath)
-
-    [System.IO.Compression.ZipFile]::ExtractToDirectory($zipfile, $outpath)
+	#Initialize Zip processes
+	Add-Type -AssemblyName System.IO.Compression.FileSystem
+	[System.IO.Compression.ZipFile]::ExtractToDirectory($zipfile, $outpath)
 }

@@ -1,84 +1,86 @@
-﻿#Get current path
+﻿<#
+    File: Import_CustomSettings.ps1
+    Author: cbradley@vmware.com
+	Modified by Phil Helmling: 5 December 2019, optimised and restructured to reduce API calls
+#>
+#==========================Header=============================#
 $current_path = $PSScriptRoot;
 if($PSScriptRoot -eq ""){
-    #default path if property not set
-    $current_path = "C:\Temp\Shared";
+    $current_path = "C:\Temp\Reg";
 }
 
-#Set common folder locations 
-$InstallPath = "HKLM:\Software\AIRWATCH\ProductProvisioning";
-$shared_path = "C:\Temp\Shared" # default path if property not set
-$shared_path = $current_path;
+Unblock-File "$Global:shared_path\Helpers.psm1"
+$LocalHelpers = Import-Module "$Global:shared_path\Helpers.psm1" -ErrorAction Stop -PassThru -Force;
 
-#setup log file
-$logLocation = "C:\Temp\Logs\AirWatchAPI.log"; # default path if property not set
-$log_path = Get-ItemPropertyValueSafe -Path $InstallPath -Name "LogPath" -DefaultVal "C:\Temp\Logs";
-$logLocation = "$log_path\AirWatchAPI.log"; 
+$shared_path = $Global:shared_path;
+#$log_path = Get-ItemPropertyValueSafe -Path $InstallPath -Name "LogPath" -DefaultVal "C:\Temp\Logs";
+$logLocation = "$Global:log_path\AirWatchAPI.log"; 
 
-If(Test-Path $InstallPath){
-    $getShared_path = ((Get-ItemProperty -Path $InstallPath).PSObject.Properties | where Name -eq "SharedPath") | Measure;
-    If($getShared_path.Count -gt 0){
-        $shared_path = Get-ItemPropertyValue -Path $InstallPath -Name "SharedPath"; 
-        if($debug){
-            Write-Log2 -Path $logLocation -Message "Shared Path $shared_path" -Level Info
-        }
-    }
-} 
-
-#Import Libraries and Functions
-Unblock-File "$shared_path\Utility-Functions.psm1"
-$module = Import-Module "$shared_path\Utility-Functions.psm1" -ErrorAction Stop -PassThru -Force;
-
-if(Test-Path "$current_path\api-debug.config"){
-    $useDebugConfig = $true;
+$GlobalModules = @();
+$GlobalImporter = @("$shared_path\Utility-Functions.psm1")
+foreach ($Import in $GlobalImporter){
+    Unblock-File $Import;
+    $GlobalModules += Import-Module $Import -ErrorAction Stop -PassThru -Force;
 }
-
-[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 
 function Get-AWAPIConfiguration{
-    if(!$useDebugConfig){
-        $api_config_file = [IO.File]::ReadAllText("$current_path\api.config");
-        if($api_config_file.Contains('"ApiConfig"')){
-            $api_settings = $api_config_file;
-            $encrypted = ConvertTo-EncryptedFile -FileContents $api_config_file;
+	param([bool]$Debug)
+	If($Debug) {
+		Write-Log2 -Path "$logLocation" -Message "Get device attributes from api.config" -Level Info
+		Write-Log2 -Path "$logLocation" -Message "---------------------------------------------------------------------------" -Level Info
+	}
+	if(Test-Path "$Global:shared_path\api-debug.config"){
+		$useDebugConfig = $true;
+		#$Debug = $true;
+	}
+	#Read api.config file and return as object
+	if(!$useDebugConfig){
+        $Private:api_config_file = [IO.File]::ReadAllText("$Global:shared_path\api.config");
+		If ($Debug) {
+			Write-Log2 -Path "$logLocation" -Message "api_config_file: $Global:shared_path\api.config" -Level Info
+		}
+		#Encrypt api.config if not already (test to read if 'ApiConfig' exists)
+        if($Private:api_config_file.Contains('"ApiConfig"')){
+            $Private:api_settings = $Private:api_config_file;
+            $encrypted = ConvertTo-EncryptedFile -FileContents $Private:api_config_file;
             if($encrypted){
-                Set-Content -Path ("$current_path\api.config") -Value $encrypted;
+                Set-Content -Path ("$Global:shared_path\api.config") -Value $encrypted;
             }
         } else {
-            $Private:api_settings = ConvertFrom-EncryptedFile -FileContents $api_config_file;
+			#If already enrypted, read into ConvertFrom-EncryptedFile function to decrypt
+			$Private:api_settings = ConvertFrom-EncryptedFile -FileContents $Private:api_config_file;
         }
     } else {
-          $api_config_file = [IO.File]::ReadAllText("$shared_path\api-debug.config");
-          $Private:api_settings = $api_config_file;
+        If ($Debug) {
+			Write-Log2 -Path "$logLocation" -Message "api_config_file: $Global:shared_path\api-debug.config" -Level Info
+		}
+		$Private:api_config_file = [IO.File]::ReadAllText("$Global:shared_path\api-debug.config");
+        $Private:api_settings = $Private:api_config_file;
     }
     $Private:api_settings_obj = ConvertFrom-Json -InputObject $Private:api_settings
-
-    $Global:Server =  $Private:api_settings_obj.ApiConfig.Server;
-    $Private:API_Key = $Private:api_settings_obj.ApiConfig.ApiKey
-    $Private:Auth = $Private:api_settings_obj.ApiConfig.ApiAuth;
-    $Global:OrganizationGroupId = $Private:api_settings_obj.ApiConfig.OrganizationGroupId;
-
+	
     $content_type = "application/json;version=1";
     $content_type_v2 = "application/json;version=2";
 
-    #$Private:Headers = @{"Authorization"=$Private:Auth;"aw-tenant-code"=$Private:API_Key;"accept"=$content_type;"content-type"=$content_type};
-    #$Private:Headers_V2 = @{"Authorization"=$Private:Auth;"aw-tenant-code"=$Private:API_Key;"accept"=$content_type_v2;"content-type"=$content_type_v2};
-
-    #DeviceId Getter
+    #If DeviceId property doesn't exist in the api.config file then add it
     If(![bool]($api_settings_obj.ApiConfig.PSobject.Properties.name -match "DeviceId")) {
         $Private:api_settings_obj.ApiConfig | Add-Member -MemberType NoteProperty -Name "DeviceId" -Value -1;
-    } Else {
-        If($api_settings_obj.ApiConfig.DeviceId -ne ""){
-           $deviceid = $Private:api_settings_obj.ApiConfig.DeviceId;
-        }
-    } 
-
-    #$Private:api_settings_obj | Add-Member -MemberType NoteProperty -Name "HeadersV1" -Value $Private:Headers;
-    #$Private:api_settings_obj | Add-Member -MemberType NoteProperty -Name "HeadersV2" -Value $Headers_V2;
+		If ($Debug) {
+			Write-Log2 -Path "$logLocation" -Message "add DeviceId as property" -Level Info
+		}
+    }
+	#If OrganizationGroupName property doesn't exist in the api.config file then add it
+	If(![bool]($api_settings_obj.ApiConfig.PSobject.Properties.name -match "OrganizationGroupName")) {
+        $Private:api_settings_obj.ApiConfig | Add-Member -MemberType NoteProperty -Name "OrganizationGroupName" -Value -1;
+		If ($Debug) {
+			Write-Log2 -Path "$logLocation" -Message "add OrganizationGroupName as property" -Level Info
+		}
+    }
 
     return $api_settings_obj;
 }
 
+#OLD FUNCTION USE GET-NEWDEVICEID
 function Get-EnrollmentStatus{
     param([string]$DeviceId)
 
@@ -109,23 +111,31 @@ function Get-EnrollmentStatus{
 }
 
 function Invoke-SecureWebRequest{
-    param([string]$Endpoint, [string]$Method="GET", $ApiVersion=1, $Data, [bool]$Debug=$false)
-    $Private:api_settings_obj = Get-AWAPIConfiguration;
-
-    $SSLThumbprint = $Private:api_settings_obj.ApiConfig.SSLThumbprint;
-
-    $Endpoint = $Endpoint.Replace("{DeviceId}",$Global:DeviceId).Replace("{OrganizationGroupId}",$Global:OrganizationGroupId);
+    param([string]$Endpoint, [string]$Method="GET", $ApiVersion=1, $Data, [bool]$Debug, [string]$SSLThumbPrint, [string]$Server, [string]$OrganizationGroupId, [string]$API_Key, [string]$Auth, [string]$DeviceId)
+	
+    #$Private:api_settings_obj = Get-AWAPIConfiguration; #done once in main program
+	#$SSLThumbprint = $Private:api_settings_obj.ApiConfig.SSLThumbprint;
+	If($Debug) {
+		Write-Log2 -Path "$logLocation" -Message "Entered Invoke-SecureWebRequest with Server/Endpoint: $Server/$Endpoint and $SSLThumbprint and $DeviceId" -Level Info
+    }
+	$Endpoint = $Endpoint.Replace("{DeviceId}",$DeviceId).Replace("{OrganizationGroupId}",$OrganizationGroupId);
 
     Try
     {
         # Create web request
-        $WebRequest = [System.Net.WebRequest]::Create("$Global:Server/$Endpoint")
-        $WebRequest.Method = $Method;
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+		$WebRequest = [System.Net.WebRequest]::Create("$Server/$Endpoint")
+		If($Debug) {
+			Write-Log2 -Path "$logLocation" -Message "webrequest create: $Server/$Endpoint" -Level Info
+        }
+		$WebRequest.Method = $Method;
 
         #Setting Private Headers
-        $WebRequest.Headers.Add("aw-tenant-code",$Private:api_settings_obj.ApiConfig.ApiKey);
-        $WebRequest.Headers.Add("Authorization",$Private:api_settings_obj.ApiConfig.ApiAuth);
-        
+        #$WebRequest.Headers.Add("aw-tenant-code",$Private:api_settings_obj.ApiConfig.ApiKey);
+        #$WebRequest.Headers.Add("Authorization",$Private:api_settings_obj.ApiConfig.ApiAuth);
+        $WebRequest.Headers.Add("aw-tenant-code",$API_Key);
+        $WebRequest.Headers.Add("Authorization",$Auth);
+		
         #Setting Content
         $WebRequest.Accept = "application/json;version=$ApiVersion";
         $WebRequest.ContentType = "application/json;version=$ApiVersion";  
@@ -148,26 +158,32 @@ function Invoke-SecureWebRequest{
 
         # Set the callback to check for null certificate and thumbprint matching.
         $WebRequest.ServerCertificateValidationCallback = {
-            $ThumbPrint = $SSLThumbprint;
+            #$ThumbPrint = $SSLThumbprint;
+			
             $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]$args[1]
-            
+            #Write-Log2 -Path "$logLocation" -Message "certificate: $certificate" -Level Info
             If ($certificate -eq $null)
             {
-                return $false
+                Write-Log2 -Path "$logLocation" -Message "no cert" -Level WARN
+				return $false
             }
  
-            If (($certificate.Thumbprint -eq $ThumbPrint) -and ($certificate.SubjectName.Name -ne $certificate.IssuerName.Name))
+            #If (($certificate.Thumbprint -eq $ThumbPrint) -and ($certificate.SubjectName.Name -ne $certificate.IssuerName.Name))
+			If ($certificate.Thumbprint -eq $SSLThumbprint) #-and ($certificate.SubjectName.Name -ne $certificate.IssuerName.Name))
             {
-                return $true
+                If($Debug) {
+					Write-Log2 -Path "$logLocation" -Message "Certificate is good" -Level Info
+				}
+				return $true
             }
+			If($Debug) {
+				Write-Log2 -Path "$logLocation" -Message "Certificate is no good" -Level WARN
+			}
             return $false
         }      
         # Get response stream
         $Response = $webrequest.GetResponse();
         $ResponseStream = $webrequest.GetResponse().GetResponseStream()
-
-        $SSLThumbPrint = $null;
-        $Private:api_settings_obj = $null;
 
         # Create a stream reader and read the stream returning the string value.
         $StreamReader = New-Object System.IO.StreamReader -ArgumentList $ResponseStream
@@ -202,14 +218,16 @@ function Invoke-SecureWebRequest{
 }
 
 function Invoke-PrivateWebRequest{
-    param([string]$Endpoint, $Method="Get", $ApiVersion=1, $Data, [bool]$Debug=$false)
+    param([string]$Endpoint, $Method="Get", $ApiVersion=1, $Data, [bool]$Debug, [string]$SSLThumbPrint, [string]$Server, [string]$OrganizationGroupId, [string]$API_Key, [string]$Auth, [string]$DeviceId)
     
-    $Private:api_settings_obj = Get-AWAPIConfiguration;
-
-    $Endpoint = $Endpoint.Replace("{DeviceId}",$Global:DeviceId).Replace("{OrganizationGroupId}",$Global:OrganizationGroupId);
+    #$Private:api_settings_obj = Get-AWAPIConfiguration;
+	Write-Log2 -Path "$logLocation" -Message "Entered Invoke-PrivateWebRequest with Global:Server/Endpoint: $Global:Server/$Endpoint" -Level Info
+    $Endpoint = $Endpoint.Replace("{DeviceId}",$DeviceId).Replace("{OrganizationGroupId}",$OrganizationGroupId);
     $WebRequest = $null;
     Try {
-        $WebRequest = Invoke-WebRequest -Uri ("$Global:Server/$Endpoint") -Method $Method -Headers $Private:api_settings_obj."HeadersV$ApiVersion" -Body $Data -UseBasicParsing;
+		#NOT SURE IF HEADERv1 WILL WORK AS THAT OBJECT DOESN'T EXIST
+	    $WebRequest = Invoke-WebRequest -Uri ("$Global:Server/$Endpoint") -Method $Method -Headers $Private:api_settings_obj."HeadersV$ApiVersion" -Body $Data -UseBasicParsing;
+		Write-Log2 -message "WebRequest: $WebRequest" WARN
     } Catch{
         $ErrorMessage = $_.Exception.Message;
         If($Debug){ Write-Log2 -Message "An error has occurrred.  Error: $ErrorMessage" }
@@ -224,118 +242,112 @@ function Invoke-PrivateWebRequest{
 }
 
 function Get-NewDeviceId{
-    $Private:api_settings_obj = Get-AWAPIConfiguration;
-
-    $Server = $Private:api_settings_obj.ApiConfig.Server;
-    $Global:OrganizationGroupId = $Private:api_settings_obj.ApiConfig.OrganizationGroupId;
-    $Global:deviceid = $Private:api_settings_obj.ApiConfig.DeviceId;
+	param([string]$Method="GET", $ApiVersion=1, $Data, [bool]$Debug, [string]$SSLThumbPrint, [string]$Server, [string]$OrganizationGroupId, [string]$API_Key, [string]$Auth)
 
     $serialSearch = wmic bios get serialnumber;
     $serialnumber = $serialSearch[2];
     $serialnumber = $serialnumber.Trim();
-
-    $serialEncoded = [System.Web.HttpUtility]::UrlEncode($serialnumber);
+	$serialEncoded = [System.Web.HttpUtility]::UrlEncode($serialnumber);
     $deviceSearchEndpoint = "api/mdm/devices?searchBy=Serialnumber&id=$serialEncoded";
-
-    If($Private:api_settings_obj.ApiConfig.SSLThumbprint){      
-        $WebResponse = Invoke-SecureWebRequest -Endpoint $deviceSearchEndpoint -Method $Method -ApiVersion 1 -Data $Data -Debug $Debug
-    } Else{
-        $WebResponse = Invoke-PrivateWebRequest -Endpoint $deviceSearchEndpoint -Method $Method -ApiVersion 1 -Data $Data -Debug $Debug
+	If($Debug){
+		Write-Log2 -Path "$logLocation" -Message "Entered Get-NewDeviceId" -Level Info
+		Write-Log2 -Path "$logLocation" -Message "-----------------------" -Level Info
+		Write-Log2 -Path "$logLocation" -Message "serialnumber: $serialnumber" -Level Info
+		Write-Log2 -Path "$logLocation" -Message "SSLThumbprint: $SSLThumbprint" -Level Info
+	}
+	
+    If($SSLThumbprint){      
+		$WebResponse = Invoke-SecureWebRequest -Endpoint $deviceSearchEndpoint -Method $Method -ApiVersion 1 -Data $Data -Debug $Debug -SSLThumbPrint $SSLThumbPrint -Server $Server -API_Key $API_Key -Auth $Auth
+    } Else {
+		$WebResponse = Invoke-PrivateWebRequest -Endpoint $deviceSearchEndpoint -Method $Method -ApiVersion 1 -Data $Data -Debug $Debug -SSLThumbPrint $SSLThumbPrint -Server $Server -API_Key $API_Key -Auth $Auth
     }
-
+	
+	If($Debug){
+		Write-Log2 -Path "$logLocation" -Message "Search for Device: $WebResponse.Content" -Level Info
+	}
+		
     If($WebResponse.StatusCode -lt 300){
         If($WebResponse.Content){
             $device_json = ConvertFrom-Json($WebResponse.Content); 
+			If($Debug){
+				Write-Log2 -Path "$logLocation" -Message "device_json: $device_json" -Level Info
+			}
         }
     }
-
-    If($device_json.Id){
-        $deviceid = $device_json.Id.Value;
+    
+	If($device_json.Id){
+        #$DeviceId = $device_json.Id.Value;
         If ($device_json.EnrollmentStatus -ne "Enrolled"){
             return "Unenrolled";
         }
-        $Private:api_settings_obj.ApiConfig.DeviceId = $device_json.Id.Value;
-        #Save the Device id
-        $apicontent = ConvertTo-Json $Private:api_settings_obj -Depth 10;
-        If(!$useDebugConfig){
-            $apiencryptedcontent = ConvertTo-EncryptedFile -FileContents $apicontent
-            Set-Content "$current_path\api.config" -Value $apiencryptedcontent
-        } Else {
-            Set-Content "$current_path\api-debug.config" -Value $apicontent
-        }
-        $Global:deviceid = $device_json.Id;
-       
-        return $deviceid;
-    } 
+		return $device_json
+    }
     return "Unenrolled";
 }
 
 function Invoke-AWApiCommand{
-    param([string]$Endpoint, [string]$Method="GET", $ApiVersion=1, $Data, [bool]$Debug=$false)
-
+    param([string]$Endpoint, [string]$Method="GET", $ApiVersion=1, $Data, [bool]$Debug, [string]$SSLThumbPrint, [string]$Server, [string]$OrganizationGroupId, [string]$API_Key, [string]$Auth, [string]$DeviceId)
+    #$loglocation = "C:\ProgramData\Airwatch\Logs\test.log"
+	If($Debug){
+		Write-Log2 -Path "$logLocation" -Message "Entered Invoke-AWApiCommand with endpoint: $Endpoint" -Level Info
+		Write-Log2 -Path "$logLocation" -Message "---------------------------------------------------------------------------" -Level Info
+	}
     #Return Object set
     $ReturnObjectSet = @();
 
-    #Load api config into private scope
-    $Private:api_settings_obj = Get-AWAPIConfiguration;
+	If($Private:SSLThumbprint){
+		#$Private:api_settings_obj = $null;
+		$WebRequest = Invoke-SecureWebRequest -Endpoint $Endpoint -Method $Method -ApiVersion $ApiVersion -Data $Data -Debug $Debug -SSLThumbPrint $SSLThumbPrint -Server $Server -OrganizationGroupId $OrganizationGroupId -API_Key $API_Key -Auth $Auth -DeviceId $DeviceId
+		#$Mode = 1;
+	} Else{
+		#$Private:api_settings_obj = $null;
+		$WebRequest = Invoke-PrivateWebRequest -Endpoint $Endpoint -Method $Method -ApiVersion $ApiVersion -Data $Data -Debug $Debug -SSLThumbPrint $SSLThumbPrint -Server $Server -OrganizationGroupId $OrganizationGroupId -API_Key $API_Key -Auth $Auth -DeviceId $DeviceId
+	}
 
-    If(!($Private:api_settings_obj.ApiConfig.DeviceId) -and !($Global:DeviceId)){
-        $CurrentDeviceId = Get-NewDeviceId;
-        If($CurrentDeviceId -ne "Unenrolled"){
-            $Global:DeviceId = $CurrentDeviceId
-        }
-    } Else{
-        $Global:DeviceId = $Private:api_settings_obj.ApiConfig.DeviceId;
-    }
-    $Mode = 0;
-    If($Private:api_settings_obj.ApiConfig.SSLThumbprint){
-        $Private:api_settings_obj = $null;
-        $WebRequest = Invoke-SecureWebRequest -Endpoint $Endpoint -Method $Method -ApiVersion $ApiVersion -Data $Data -Debug $Debug
-        $Mode = 1;
-    } Else{
-        $Private:api_settings_obj = $null;
-        $WebRequest = Invoke-PrivateWebRequest -Endpoint $Endpoint -Method $Method -ApiVersion $ApiVersion -Data $Data -Debug $Debug
-    }
-    
-    If($Debug){
-        Write-Log2 -Path $logLocation -Message "Connecting to: $Endpoint";
-        If($WebRequest.Content){
-            Write-Log2 -Path $logLocation -Message $WebRequest.Content;
-        }
-    }
+	If($Debug){
+		Write-Log2 -Path $logLocation -Message "Connecting to: $Endpoint";
+		If($WebRequest.Content){
+			Write-Log2 -Path $logLocation -Message $WebRequest.Content;
+		}
+    }	
 
     Try{ 
         if($WebRequest.StatusCode -lt 300){
-           $ReturnObj = New-Object -TypeName PSCustomObject -Property @{"StatusCode"=$WebRequest.StatusCode};
-           If($WebRequest.Content){
-               $ReturnObj = ConvertFrom-Json($WebRequest.Content); 
-               if($ReturnObj.Total){
-                    if($ReturnObj.Total -gt ($ReturnObj.PageSize * ($ReturnObj.Page + 1)) -and $ReturnObj.PageSize -gt 0){
-                        $ReturnObjectSet += $ReturnObj;
-                        While($ReturnObj.Total -gt ($ReturnObj.PageSize * $ReturnObj.Page)){
-                            If($Endpoint -match "([^?]*)\?"){
-                                
-                                $Page_Endpoint = $Endpoint + "&page=" + ($ReturnObj.Page + 1).ToString();
-                            } Else{
-                                $Page_Endpoint = $Endpoint + "?page=" + ($ReturnObj.Page + 1).ToString();
-                            }
+			$ReturnObj = New-Object -TypeName PSCustomObject -Property @{"StatusCode"=$WebRequest.StatusCode};
+			If($WebRequest.Content){
+			   $ReturnObj = ConvertFrom-Json($WebRequest.Content); 
+			   if($ReturnObj.Total){
+					if($ReturnObj.Total -gt ($ReturnObj.PageSize * ($ReturnObj.Page + 1)) -and $ReturnObj.PageSize -gt 0){
+						$ReturnObjectSet += $ReturnObj;
+						While($ReturnObj.Total -gt ($ReturnObj.PageSize * $ReturnObj.Page)){
+							If($Endpoint -match "([^?]*)\?"){
+								$Page_Endpoint = $Endpoint + "&page=" + ($ReturnObj.Page + 1).ToString();
+								Write-Log2 -Path $logLocation -Message $Page_Endpoint;
+							} Else{
+								$Page_Endpoint = $Endpoint + "?page=" + ($ReturnObj.Page + 1).ToString();
+								Write-Log2 -Path $logLocation -Message $Page_Endpoint;
+							}
 
-                            If($Mode -eq 1){
-                                $WebRequest = Invoke-SecureWebRequest -Endpoint $Page_Endpoint -Method $Method -ApiVersion $ApiVersion -Data $Data -Debug $Debug
-                            } Else{
-                                $WebRequest = Invoke-PrivateWebRequest -Endpoint $Page_Endpoint -Method $Method -ApiVersion $ApiVersion -Data $Data -Debug $Debug
-                            }
-                            if($WebRequest.StatusCode -eq 200){
-                                 $ReturnObj += (ConvertFrom-Json($WebRequest.Content)); 
-                            }
-                        }
-                    }
-               }
-           } 
-           return $ReturnObj;
-        }
-        else {
-           return $WebRequest.Content;
+							#If($Mode -eq 1){
+							If($Private:SSLThumbprint){
+								$WebRequest = Invoke-SecureWebRequest -Endpoint $Page_Endpoint -Method $Method -ApiVersion $ApiVersion -Data $Data -Debug $Debug -SSLThumbPrint $SSLThumbPrint -Server $Server -OrganizationGroupId $OrganizationGroupId -API_Key $API_Key -Auth $Auth -DeviceId $DeviceId
+							} Else {
+								$WebRequest = Invoke-PrivateWebRequest -Endpoint $Page_Endpoint -Method $Method -ApiVersion $ApiVersion -Data $Data -Debug $Debug -SSLThumbPrint $SSLThumbPrint -Server $Server -OrganizationGroupId $OrganizationGroupId -API_Key $API_Key -Auth $Auth -DeviceId $DeviceId
+							}
+							if($WebRequest.StatusCode -eq 200){
+								 $ReturnObj += (ConvertFrom-Json($WebRequest.Content)); 
+							}
+						}
+					}
+				}
+			}
+			If($Debug){
+				Write-Log2 -Path $logLocation -Message "ReturnObj: $ReturnObj";
+			}
+			return $ReturnObj;
+	
+        } Else {
+			return $WebRequest.Content;
         }
     } Catch {
         $ErrorMessage = $_.Exception.Message;
@@ -343,4 +355,4 @@ function Invoke-AWApiCommand{
     }
 }
 
-Export-ModuleMember -Function Invoke-AWApiCommand, ConvertTo-EncryptedFile, ConvertFrom-EncryptedFile, Get-AirWatchProfiles, Get-AWProfileCache
+Export-ModuleMember -Function Get-AWAPIConfiguration, Invoke-SecureWebRequest, Invoke-PrivateWebRequest, Get-NewDeviceId, Invoke-AWApiCommand

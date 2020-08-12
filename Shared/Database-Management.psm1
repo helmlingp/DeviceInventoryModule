@@ -1,13 +1,22 @@
-﻿$current_path = $PSScriptRoot;
+﻿<#
+    File: Utility-Functions.psm1
+    Author: cbradley@vmware.com
+	Modified by Phil Helmling: 27 Nov 2019, optimised and restructured to reduce API calls
+#>
+
+#==========================Header=============================#
+$current_path = $PSScriptRoot;
 if($PSScriptRoot -eq ""){
-    $current_path = "C:\Temp\Shared\";
+    $current_path = "C:\Temp\Reg";
 }
 
-Unblock-File "$current_path\Utility-Functions.psm1"
-$module = Import-Module "$current_path\Utility-Functions.psm1" -ErrorAction Stop -PassThru -Force;
+Unblock-File "$Global:shared_path\Helpers.psm1"
+$LocalHelpers = Import-Module "$Global:shared_path\Helpers.psm1" -ErrorAction Stop -PassThru -Force;
 
-$logLocation = "C:\Temp\Logs\UtilitiesLogs.log";
-$securityLogLocation = "C:\Temp\Logs\SecurityAudit.log";
+$shared_path = $Global:shared_path;
+#$log_path = Get-ItemPropertyValueSafe -Path $InstallPath -Name "LogPath" -DefaultVal "C:\Temp\Logs";
+$logLocation = "$Global:log_path\Utility-Functions.log"; 
+$securityLogLocation = "$Global:log_path\SecurityAudit.log";
 
 $DatabaseRegPath = "HKLM:\Software\AirWatch\ProductProvisioning\DatabaseAccess"
 If(!(Test-Path $DatabaseRegPath)){
@@ -49,7 +58,7 @@ Class AuditDatabase{
             }
             $this.DB = ConvertFrom-JSON -InputObject $AuditDBJson;
         } else{
-            $this.DB = New-Object PSCustomObject -Property @{"Profile"=@()}  
+            $this.DB = New-Object PSCustomObject -Property @{"Profile"=@()} 
         }
         $this.SetStatus([DatabaseStatus]::Open);
     }
@@ -331,19 +340,24 @@ Function Open-AuditDatabase{
         $CurrentTime = Get-Date;
         $DatabaseStatus = Get-ItemPropertyValueSafe -Path $DatabaseRegPath -Name $DatabaseRegName -DefaultVal 0
         If($DatabaseStatus -eq 0 -or $Timer -gt ($MaxTimeout * 1000)){
+			Write-Log2 -Path $logLocation -Message "DatabaseRegPath: $DatabaseRegPath";
+			Write-Log2 -Path $logLocation -Message "DatabaseRegName: $DatabaseRegName";
+			Write-Log2 -Path $logLocation -Message "DatabaseStatus: $DatabaseStatus";
             break;
         } ElseIf($DatabaseStatus -ne 0){
             $LastUpdate = [datetime](Get-ItemPropertyValueSafe -Path $DatabaseRegPath -Name ($DatabaseRegName + "_LastUpdate" ) -DefaultVal $Now);
-            If(($CurrentTime.Subtract($LastUpdate)).TotalSeconds -gt $MaxTimeout){
+            Write-Log2 -Path $logLocation -Message "DatabaseRegPath: $DatabaseRegPath";
+			Write-Log2 -Path $logLocation -Message "DatabaseRegName: $DatabaseRegName";
+			Write-Log2 -Path $logLocation -Message "DatabaseStatus: $DatabaseStatus";
+			If(($CurrentTime.Subtract($LastUpdate)).TotalSeconds -gt $MaxTimeout){
                 break;
             }
         }
         Sleep -Milliseconds 500;
         $Timer += 500;
     }
-    $AuditDatabase = [AuditDatabase]::new($Path,($Encrypted.IsPresent));
-
-    return $AuditDatabase;
+	$AuditDatabase = [AuditDatabase]::new($Path,($Encrypted.IsPresent));
+	return $AuditDatabase;
 }
 
 

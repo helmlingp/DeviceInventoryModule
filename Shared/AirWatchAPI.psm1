@@ -131,8 +131,6 @@ function Invoke-SecureWebRequest{
 		$WebRequest.Method = $Method;
 
         #Setting Private Headers
-        #$WebRequest.Headers.Add("aw-tenant-code",$Private:api_settings_obj.ApiConfig.ApiKey);
-        #$WebRequest.Headers.Add("Authorization",$Private:api_settings_obj.ApiConfig.ApiAuth);
         $WebRequest.Headers.Add("aw-tenant-code",$API_Key);
         $WebRequest.Headers.Add("Authorization",$Auth);
 		
@@ -221,16 +219,16 @@ function Invoke-PrivateWebRequest{
     param([string]$Endpoint, $Method="Get", $ApiVersion=1, $Data, [bool]$Debug, [string]$SSLThumbPrint, [string]$Server, [string]$OrganizationGroupId, [string]$API_Key, [string]$Auth, [string]$DeviceId)
     
     #$Private:api_settings_obj = Get-AWAPIConfiguration;
-	Write-Log2 -Path "$logLocation" -Message "Entered Invoke-PrivateWebRequest with Global:Server/Endpoint: $Global:Server/$Endpoint" -Level Info
+	If($Debug){ Write-Log2 -Path "$logLocation" -Message "Entered Invoke-PrivateWebRequest with Server/Endpoint: $:Server/$Endpoint" -Level Info }
     $Endpoint = $Endpoint.Replace("{DeviceId}",$DeviceId).Replace("{OrganizationGroupId}",$OrganizationGroupId);
     $WebRequest = $null;
     Try {
 		#NOT SURE IF HEADERv1 WILL WORK AS THAT OBJECT DOESN'T EXIST
-	    $WebRequest = Invoke-WebRequest -Uri ("$Global:Server/$Endpoint") -Method $Method -Headers $Private:api_settings_obj."HeadersV$ApiVersion" -Body $Data -UseBasicParsing;
-		Write-Log2 -message "WebRequest: $WebRequest" WARN
+	    $WebRequest = Invoke-WebRequest -Uri ("$Server/$Endpoint") -Method $Method -Headers $Private:api_settings_obj."HeadersV$ApiVersion" -Body $Data -UseBasicParsing;
+		If($Debug){ Write-Log2 -Path "$logLocation" -message "WebRequest: $WebRequest" -Level WARN }
     } Catch{
         $ErrorMessage = $_.Exception.Message;
-        If($Debug){ Write-Log2 -Message "An error has occurrred.  Error: $ErrorMessage" }
+        If($Debug){ Write-Log2 -Path "$logLocation" -Message "An error has occurrred.  Error: $ErrorMessage" -Level WARN }
         if($_.Exception -like "Unable to connect to the remote server"){
             return "Offline";
         } 
@@ -247,12 +245,15 @@ function Get-NewDeviceId{
     $serialSearch = wmic bios get serialnumber;
     $serialnumber = $serialSearch[2];
     $serialnumber = $serialnumber.Trim();
-	$serialEncoded = [System.Web.HttpUtility]::UrlEncode($serialnumber);
+	#$serialEncoded = [System.Web.HttpUtility]::UrlEncode($serialnumber);
+	$serialEncoded = [uri]::EscapeDataString($serialnumber);
     $deviceSearchEndpoint = "api/mdm/devices?searchBy=Serialnumber&id=$serialEncoded";
 	If($Debug){
 		Write-Log2 -Path "$logLocation" -Message "Entered Get-NewDeviceId" -Level Info
 		Write-Log2 -Path "$logLocation" -Message "-----------------------" -Level Info
 		Write-Log2 -Path "$logLocation" -Message "serialnumber: $serialnumber" -Level Info
+		Write-Log2 -Path "$logLocation" -Message "serialnumber1: $serialnumber1" -Level Info
+		Write-Log2 -Path "$logLocation" -Message "serialEncoded: $serialEncoded" -Level Info
 		Write-Log2 -Path "$logLocation" -Message "SSLThumbprint: $SSLThumbprint" -Level Info
 	}
 	

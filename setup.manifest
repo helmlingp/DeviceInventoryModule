@@ -1,7 +1,7 @@
 {"Modules":[
 	{"Name":"Shared",
 	 "InstallLocation":"C:\\ProgramData\\Airwatch\\Shared",
-	 "Version":"2800",
+	 "Version":"2801",
 	 "Manifest":[
 		{"CopyFiles":
 			{"Destination":"$InstallLocation",

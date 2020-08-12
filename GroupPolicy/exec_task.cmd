@@ -1,0 +1,1 @@
+Powershell.exe -ExecutionPolicy Bypass -Command "& {Start-ScheduledTask -TaskName 'Import_GroupPolicy' -TaskPath '\AirWatch MDM\'}"

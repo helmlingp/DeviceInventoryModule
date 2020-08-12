@@ -1,0 +1,91 @@
+{"Modules":[
+	{"Name":"Shared",
+	 "InstallLocation":"C:\\Temp\\Shared",
+	 "Version":"2730",
+	 "Manifest":[
+		{"CopyFiles":
+			{"Destination":"$InstallLocation",
+			"From":".\\Shared\\*"
+			}
+		},
+		{"CreateAccessFile":{
+			"Location":"$InstallLocation",
+			"SecurityLevel":0,
+			"AccessRules": [{
+				"AccessLogic": [
+				{"Group": "Users",
+				 "Rule": "IN"},
+				{"User": "Administrator",
+				 "Rule": "NOTIN"}
+				]
+			 }]
+		   }
+		},
+		{"DeleteFiles":[
+			".\\Shared\\api.config"
+		]},
+		{"CreateRegKeys":[
+			{ "Keys":[
+				{"LogPath":"C:\\Temp\\Logs"},
+				{"SharedPath":"C:\\Temp\\Shared"},
+				{"TestPath":"C:\\Temp\\Shared"}
+			  ]
+			}
+		]},
+		{"CreateTask":{
+			"Name":"Apply_AccessPolicies",
+			"PSFile":"$InstallLocation\\ExecuteAccessPolicies.ps1",
+			"AutoStart":0
+		}}
+	  ]
+    },
+	{"Name":"CustomSettings",
+	 "InstallLocation":"C:\\Temp\\Reg",
+	 "Version":"1.0.1",
+	 "Manifest":[
+		{"CopyFiles":
+			{"Destination":"$InstallLocation",
+			"From":".\\Reg\\*"}
+		},
+		{"CopyFiles":
+			{"Destination":"$InstallLocation\\Polls",
+			"From":".\\Reg\\Polls\\*"}
+		},
+		{"CreatePaths":{
+			"Path":"$InstallLocation",
+			"Folders":["Queue","Installed","Profiles"]
+			}
+		},
+		{"CreateTask":{
+			"Name":"Install_CustomSettings",
+			"PSFile":"$InstallLocation\\Import_CustomSettings.ps1",
+			"TaskInterval":"PT5M"
+		}},
+		{"CreateTask":{
+			"Name":"Install_SmarterGroups",
+			"PSFile":"$InstallLocation\\Import_SmarterGroups.ps1",
+			"TaskInterval":"PT5M"
+		}},
+		{"CreateTask":{
+			"Name":"Install_PollCounter",
+			"PSFile":"$InstallLocation\\Polls\\PollCounters.ps1",
+			"TaskInterval":"PT5M"
+		}}
+	  ]
+    },
+	{"Name":"AWLogon",
+	 "InstallLocation":"C:\\Temp\\UserManagement",
+	 "Version":"0.7.0",
+	 "Manifest":[
+		{"CopyFiles":
+			{"Destination":"$InstallLocation",
+			"From":".\\UserManagement\\*"}
+		},
+		{"CreateTask":{
+			"Name":"MultiUser_Logon",
+			"PSFile":"$InstallLocation\\AWLogon.ps1"
+		}}
+	  ]
+	}
+  ]
+}	

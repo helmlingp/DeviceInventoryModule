@@ -1,0 +1,44 @@
+{"TagMaps":[
+	{
+	 "Type":"PowerShell",
+	 "PSLogic":"((Get-Date).Subtract((Get-MpComputerStatus).AntispywareSignatureLastUpdated).TotalDays -GE 7)",
+	 "TagName":"Defender: Out-Of-Date 7"
+	},
+	{
+	 "Type":"PowerShell",
+	 "PSLogic":"((Get-Date).Subtract((Get-MpComputerStatus).AntispywareSignatureLastUpdated).TotalDays -GE 7)",
+	 "TagName":"Defender: Out-Of-Date 14"
+	},
+	{
+	 "Type":"PowerShell",
+	 "PSLogic":"(Test-Path 'C:\\Temp\\')",
+	 "NewOrganizationGroup":"Chase"
+	},
+	{"Type":"AirWatch",
+	 "Triggers":[
+		{"Type":"PowerShell",
+		 "PSLogic":"!(Test-Path 'C:\\Temp\\')"
+		},
+		{"Type":"Application",
+		 "ApplicationName":"*AirWatch*",
+		 "Version":">3.0.0"
+		},
+		{"Type":"Profile",
+		 "ApplicationName":"*Cortana*"
+		}
+	 ],
+	 "TagName":"Defender Warning"
+	},
+	{
+	 "Type":"AirWatch",
+	 "Triggers":[
+		{"Type":"Timer",
+			"TimerName":"Timer1",
+			"StartTime":"Now",
+			"EndTime":"5m",
+			"Active":"After"
+		}
+	 ],
+	 "TagName":"Timer0"
+	}
+]}

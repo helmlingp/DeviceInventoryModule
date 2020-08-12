@@ -1,0 +1,17 @@
+[
+	
+    {
+        "Counter":  "\\Processor Information(_Total)\\% Processor Utility",
+        "CounterId":  "CPU_Utilization",
+		"Type":"CustomAttributes"
+    },
+    {
+        "Counter":  "\\Memory\\% Committed Bytes In Use",
+        "CounterId":  "Memory_Utilization",
+		"Type": "Note",
+		"NoteFormat": "Json"
+    },
+	{
+		"SampleTime": 1
+	}
+]

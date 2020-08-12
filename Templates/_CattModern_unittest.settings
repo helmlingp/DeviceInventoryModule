@@ -1,0 +1,36 @@
+[
+	{
+		"Name": "AppInfo",
+		"Cmndlets": [{
+			"Cmndlet": "Get-ChildItem -Path 'C:\\Program Files (x86)' -Filter '*.exe' -Recurse",
+			"Type": "Note",
+			"NoteFormat":"Csv",
+			"NoteName": "AppInfo",
+			"Attributes": ["Name", "LastAccessTime"],
+			"FormattedAttributes": {
+				"Size": "('{0:N2}' -F ($_.Length / '1MB')).ToString() + ' MB'"
+			}
+		}]
+	},
+	{
+		"Name": "Inventory",
+		"Cmndlets": [{
+				"Cmndlet": "Get-CIMInstance CIM_ComputerSystem",
+				"FormattedAttributes": {
+					"ComputerHostname": "Name",
+					"ComputerDomain": "If($_.PartOfDomain){ $_.Domain } Else { '' }",
+					"MemoryAmount": "'{0:N2}' -F ($_.TotalPhysicalMemory / '1GB')"
+				}
+			},
+			{
+				"Cmndlet": "Get-CIMInstance CIM_BIOSElement",
+				"Type": "Note",
+				"NoteName": "BiosVersion",
+				"FormattedAttributes": {
+					"BIOSName": "Name",
+					"BIOSVersion": "$_.SMBIOSBIOSVersion"
+				}
+			}
+		]
+	}
+]

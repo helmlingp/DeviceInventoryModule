@@ -142,7 +142,7 @@ Function Create-Paths{
 }
 
 function Create-Task{
-    Param([string]$TaskPath, [string]$TaskName="\AirWatch MDM\", [string]$PShellScript, [string]$Interval, [string]$TriggerType,[bool]$AutoStart=$true,[bool]$TestInstall)
+    Param([string]$TaskPath, [string]$TaskName, [string]$PShellScript, [string]$Interval, [string]$TriggerType,[bool]$AutoStart=$true,[bool]$TestInstall)
     Try{
         #Validate job does not exist
         $arg = '-ExecutionPolicy Bypass -File "' + $PShellScript + '"'
@@ -168,6 +168,13 @@ function Create-Task{
         $S.CimInstanceProperties['MultipleInstances'].Value=3
         $D = New-ScheduledTask -Action $A -Principal $P -Trigger $T -Settings $S
 
+
+        If(!$TestInstall){
+            Register-ScheduledTask -InputObject $D -TaskName "$TaskName" -TaskPath "$TaskPath" -Force -ErrorAction Stop
+         } Else {
+            Write-Host "Create scheduled task named $TaskName at $TaskPath";
+         }
+        
         If($Interval){
             $Task = Get-ScheduledTask -TaskName "$TaskName" -TaskPath "$TaskPath";
             $Task.Triggers[0].Repetition.Interval = $Interval;
@@ -179,11 +186,6 @@ function Create-Task{
             }
         }
 
-        If(!$TestInstall){
-            Register-ScheduledTask -InputObject $D -TaskName "$TaskName" -TaskPath "$TaskPath" -Force -ErrorAction Stop
-         } Else {
-            Write-Host "Create scheduled task named $TaskName at $TaskPath";
-         }
     } Catch {
         $e = $_.Exception.Message;
         Write-Host "Error: Job creation failed.  Validate user rights.";
@@ -320,9 +322,9 @@ Function Invoke-Installation{
                     }
                     Create-Task -TaskName $TaskName -TaskPath $TaskPath -PShellScript $PowerShellFile -Interval $TaskInterval -Trigger $TriggerType -AutoStart $AutoStart -TestInstall $TestInstall;
                 } Else {
-                    If((Get-ScheduledTask | where {$_.TaskName -EQ $TaskName -and $_.TaskPath -EQ $TaskPath} | measure).Count -gt 0){
-                        Unregister-ScheduledTask -TaskName $TaskName -TaskPath $TaskPath -WhatIf:$TestInstall;
-                    }
+                    # If((Get-ScheduledTask | where {$_.TaskName -EQ $TaskName -and $_.TaskPath -EQ $TaskPath} | measure).Count -gt 0){
+                    #     Unregister-ScheduledTask -TaskName $TaskName -TaskPath $TaskPath -WhatIf:$TestInstall;
+                    # }
                 }
             } ElseIf ($ManifestAction -eq "AccessRule"){
                 $AccessPolicyPath =  Get-ItemPropertyValue -Path $ModuleRegPath -Name "AccessPolicy";

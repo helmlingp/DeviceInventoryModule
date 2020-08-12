@@ -1,13 +1,12 @@
 {"Modules":[
 	{"Name":"Shared",
-	 "InstallLocation":"C:\\Temp\\Shared",
-	 "Version":"2730",
+	 "InstallLocation":"C:\\ProgramData\\Airwatch\\Shared",
+	 "Version":"2750",
 	 "Manifest":[
 		{"CopyFiles":
 			{"Destination":"$InstallLocation",
 			"From":".\\Shared\\*"
-			}
-		},
+		}},
 		{"CreateAccessFile":{
 			"Location":"$InstallLocation",
 			"SecurityLevel":0,
@@ -19,16 +18,15 @@
 				 "Rule": "NOTIN"}
 				]
 			 }]
-		   }
-		},
+		}},
 		{"DeleteFiles":[
 			".\\Shared\\api.config"
 		]},
 		{"CreateRegKeys":[
 			{ "Keys":[
-				{"LogPath":"C:\\Temp\\Logs"},
-				{"SharedPath":"C:\\Temp\\Shared"},
-				{"TestPath":"C:\\Temp\\Shared"}
+				{"LogPath":"C:\\ProgramData\\Airwatch\\Logs"},
+				{"SharedPath":"C:\\ProgramData\\Airwatch\\Shared"},
+				{"TestPath":"C:\\ProgramData\\Airwatch\\Shared"}
 			  ]
 			}
 		]},
@@ -40,52 +38,39 @@
 	  ]
     },
 	{"Name":"CustomSettings",
-	 "InstallLocation":"C:\\Temp\\Reg",
-	 "Version":"1.0.1",
+	 "InstallLocation":"C:\\ProgramData\\Airwatch\\Reg",
+	 "Version":"1.0.2",
 	 "Manifest":[
 		{"CopyFiles":
 			{"Destination":"$InstallLocation",
 			"From":".\\Reg\\*"}
 		},
-		{"CopyFiles":
-			{"Destination":"$InstallLocation\\Polls",
-			"From":".\\Reg\\Polls\\*"}
-		},
 		{"CreatePaths":{
 			"Path":"$InstallLocation",
 			"Folders":["Queue","Installed","Profiles"]
+		}},
+		{"CreateRegKeys":[
+			{ "Keys":[
+				{"LogPath":"C:\\ProgramData\\Airwatch\\Logs"}
+			  ]
 			}
-		},
+		]},
 		{"CreateTask":{
 			"Name":"Install_CustomSettings",
 			"PSFile":"$InstallLocation\\Import_CustomSettings.ps1",
-			"TaskInterval":"PT5M"
+			"TaskInterval":"PT4H"
 		}},
 		{"CreateTask":{
 			"Name":"Install_SmarterGroups",
 			"PSFile":"$InstallLocation\\Import_SmarterGroups.ps1",
-			"TaskInterval":"PT5M"
+			"TaskInterval":"PT1H"
 		}},
 		{"CreateTask":{
-			"Name":"Install_PollCounter",
-			"PSFile":"$InstallLocation\\Polls\\PollCounters.ps1",
-			"TaskInterval":"PT5M"
+			"Name":"Install_Profiles",
+			"PSFile":"$InstallLocation\\Install_Profiles.ps1",
+			"TaskInterval":"PT4H"
 		}}
 	  ]
-    },
-	{"Name":"AWLogon",
-	 "InstallLocation":"C:\\Temp\\UserManagement",
-	 "Version":"0.7.0",
-	 "Manifest":[
-		{"CopyFiles":
-			{"Destination":"$InstallLocation",
-			"From":".\\UserManagement\\*"}
-		},
-		{"CreateTask":{
-			"Name":"MultiUser_Logon",
-			"PSFile":"$InstallLocation\\AWLogon.ps1"
-		}}
-	  ]
-	}
+    }
   ]
 }	

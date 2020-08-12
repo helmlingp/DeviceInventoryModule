@@ -1,6 +1,6 @@
 
 #############################################
-# File: AWLogon.ps1
+# File: Utility-Functions.ps1
 # Author: Chase Bradley
 # Modified by: Phil Helmling 08 Aug 2019, changed $usernameLookup in Get-CurrentLoggedonUser to only get Active and Console Session User
 # Reassigns a Shared Device to logged in user and Moves OG if needed
@@ -24,7 +24,7 @@ function Test-ItemProperty{
 
 $current_path = $PSScriptRoot;
 if($PSScriptRoot -eq ""){
-    $current_path = Get-ItemPropertyValueSafe -Path "HKLM:\SOFTWARE\AirWatch\ProductProvisioning" -Name "SharedModule-Path"  -DefaultVal "C:\Temp\Shared\";
+    $current_path = Get-ItemPropertyValueSafe -Path "HKLM:\SOFTWARE\AirWatch\ProductProvisioning" -Name "SharedlPath"  -DefaultVal "C:\Temp\Shared\";
 }
 
 Try{
@@ -35,8 +35,15 @@ Try{
     $log = $false;
 }
 
-$logLocation = "C:\Temp\Logs\UtilitiesLogs.log";
-$securityLogLocation = "C:\Temp\Logs\SecurityAudit.log";
+#Set common folder locations 
+$InstallPath = "HKLM:\Software\AIRWATCH\ProductProvisioning";
+$shared_path = "C:\Temp\Shared" # default path if property not set
+$shared_path = $current_path;
+
+#setup log file
+$logPath = Get-ItemPropertyValueSafe -Path $InstallPath -Name "LogPath" -DefaultVal "C:\Temp\Logs";
+$logLocation = "$logPath\UtilitiesLogs.log";
+$securityLogLocation = "$logPath\SecurityAudit.log";
 
 function Write-Log2{ #Wrapper function to made code easier to read;
     [CmdletBinding()]
